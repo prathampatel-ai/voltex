@@ -18,7 +18,7 @@ export class WorldScene extends Phaser.Scene {
     const map = this.make.tilemap({ key: 'map' })
     const tileset = map.addTilesetImage('voltex-tiles', 'tiles')!
 
-    const groundLayer = map.createLayer('Ground', tileset, 0, 0)!
+    const _groundLayer = map.createLayer('Ground', tileset, 0, 0)!
     const collisionLayer = map.createLayer('Collision', tileset, 0, 0)!
 
     collisionLayer.setCollisionByProperty({ collides: true })
