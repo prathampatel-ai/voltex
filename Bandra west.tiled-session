@@ -1,0 +1,23 @@
+{
+    "activeFile": "",
+    "expandedProjectPaths": [
+    ],
+    "fileStates": {
+        "#voltex-tiles": {
+            "scaleInEditor": 1
+        },
+        "untitled.tmx#voltex-tiles": {
+            "scaleInEditor": 1
+        }
+    },
+    "last.exportedFilePath": "/Users/prathampatel/Documents/voltex/src/maps",
+    "last.imagePath": "/Users/prathampatel/Downloads",
+    "map.lastUsedExportFilter": "All Files (*)",
+    "map.lastUsedFormat": "tmx",
+    "openFiles": [
+    ],
+    "project": "Bandra west.tiled-project",
+    "recentFiles": [
+    ],
+    "tileset.embedInMap": true
+}
