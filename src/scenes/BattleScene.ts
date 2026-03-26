@@ -33,16 +33,15 @@ export class BattleScene extends Phaser.Scene {
 
   create() {
     const W = 960
-    const H = 640
 
     // Background
-    this.add.rectangle(0, 0, W, H, 0x0a0c14).setOrigin(0)
+    this.add.rectangle(0, 0, W, 640, 0x0a0c14).setOrigin(0)
 
     // Subtle grid lines for atmosphere
     const grid = this.add.graphics()
     grid.lineStyle(1, 0x252d4a, 0.3)
-    for (let x = 0; x < W; x += 32) grid.moveTo(x, 0).lineTo(x, H)
-    for (let y = 0; y < H; y += 32) grid.moveTo(0, y).lineTo(W, y)
+    for (let x = 0; x < W; x += 32) grid.moveTo(x, 0).lineTo(x, 640)
+    for (let y = 0; y < 640; y += 32) grid.moveTo(0, y).lineTo(W, y)
     grid.strokePath()
 
     // Init combatants
@@ -53,7 +52,7 @@ export class BattleScene extends Phaser.Scene {
     this.playerTurn = true
     this.battleActive = true
 
-    this.buildUI(W, H)
+    this.buildUI(W, 640)
     this.log(`══ BATTLE START — Round 1 ══`)
     this.log(`Luckyfer vs Aryan Sood`)
   }
@@ -75,7 +74,7 @@ export class BattleScene extends Phaser.Scene {
     this.add.rectangle(16, 260, W - 32, 120, 0x111525).setOrigin(0).setStrokeStyle(1, 0x252d4a)
 
     // ── ACTION MENU ──
-    this.buildMenu(W, H)
+    this.buildMenu(W)
   }
 
   buildCard(x: number, y: number, isPlayer: boolean) {
@@ -115,7 +114,7 @@ export class BattleScene extends Phaser.Scene {
     this.add.text(x + 14, y + 144, `ATK ${c.atk}   DEF ${c.def}`, { fontFamily: 'monospace', fontSize: '11px', color: '#6b7a9e' })
   }
 
-  buildMenu(W: number, H: number) {
+  buildMenu(W: number) {
     this.add.rectangle(16, 392, W - 32, 232, 0x111525).setOrigin(0).setStrokeStyle(1, 0x252d4a)
     this.add.text(28, 400, '⚡ SKILLS', { fontFamily: 'monospace', fontSize: '11px', color: '#5b8cff', letterSpacing: 2 })
 
@@ -149,10 +148,6 @@ export class BattleScene extends Phaser.Scene {
     })
 
     // Guard / Focus buttons
-    const utilBtns = [
-      { label: '🛡 GUARD', sub: '−30% DMG', action: 'guard' },
-      { label: '🔵 FOCUS', sub: 'WIL +40%', action: 'focus' },
-    ]
     // These are inline at the bottom of the skill grid area — omitted for brevity, add in Phase 4
   }
 
