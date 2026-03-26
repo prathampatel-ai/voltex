@@ -25,7 +25,6 @@ export class InteractionSystem {
   private objects: Interactable[] = []
   private promptSprite!: Phaser.GameObjects.Text
   private scene: Phaser.Scene
-  private currentTarget: Interactable | null = null
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene
@@ -71,7 +70,6 @@ export class InteractionSystem {
       }
     }
 
-    this.currentTarget = nearest
 
     if (nearest) {
       const cam = this.scene.cameras.main

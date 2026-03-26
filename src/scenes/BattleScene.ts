@@ -52,12 +52,12 @@ export class BattleScene extends Phaser.Scene {
     this.playerTurn = true
     this.battleActive = true
 
-    this.buildUI(W, 640)
+    this.buildUI(W)
     this.log(`══ BATTLE START — Round 1 ══`)
     this.log(`Luckyfer vs Aryan Sood`)
   }
 
-  buildUI(W: number, H: number) {
+  buildUI(W: number) {
     // ── HEADER ──
     this.add.rectangle(0, 0, W, 40, 0x111525).setOrigin(0)
     this.add.text(16, 10, 'VOLTEX', { fontFamily: 'monospace', fontSize: '16px', color: '#5b8cff', letterSpacing: 6 })

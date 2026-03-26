@@ -2,7 +2,7 @@
 // Overlay scene — press I to open/close from WorldScene.
 
 import Phaser from 'phaser'
-import { inventory, type Item } from '../systems/InventorySystem'
+import { inventory } from '../systems/InventorySystem'
 
 const W = 960
 const H = 640

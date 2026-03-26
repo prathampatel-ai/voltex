@@ -45,7 +45,6 @@ export class WorldScene extends Phaser.Scene {
   private interactions!: InteractionSystem
   private transitions!: ZoneTransitionSystem
   private currentMapId = 'bandra-west'
-  private firstLoad = true
 
   constructor() { super({ key: 'WorldScene' }) }
 
@@ -146,7 +145,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   // ── MAP OBJECT BUILDER ───────────────────────────────────────────────────
-  private buildMapObjects(mapId: string, map: Phaser.Tilemaps.Tilemap) {
+  private buildMapObjects(mapId: string, _map: Phaser.Tilemaps.Tilemap) {
     const TS = 32 // tile size
 
     if (mapId === 'bandra-west') {
