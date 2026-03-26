@@ -5,16 +5,21 @@ import Phaser from 'phaser'
 import { dialogueSystem } from './DialogueSystem'
 import { inventory } from './InventorySystem'
 
-export type InteractableType = 'npc' | 'chest' | 'sign' | 'trigger' | 'door'
+export type InteractableType = 'npc' | 'chest' | 'sign' | 'trigger' | 'door' | 'encounter'
 
 export interface Interactable {
   type: InteractableType
   sprite: Phaser.GameObjects.Text | Phaser.GameObjects.Rectangle
-  bounds: Phaser.Geom.Rectangle   // world-space bounds for overlap check
+  bounds: Phaser.Geom.Rectangle
   dialogueKey?: string
-  itemId?: string                  // for chest: item to give
-  triggered?: boolean              // one-shot triggers won't re-fire after activation
+  itemId?: string
+  triggered?: boolean
   onInteract?: () => void
+
+  // 👇 ADD THIS
+  encounterId?: string
+  enemy?: string
+
   // Door-specific
   targetMap?: string
   spawnX?: number
@@ -86,32 +91,42 @@ export class InteractionSystem {
   }
 
   private fire(obj: Interactable) {
-    if (dialogueSystem.isActive) return
+  if (dialogueSystem.isActive) return
 
-    if (obj.type === 'trigger') {
-      obj.triggered = true
-    }
+  // ── ENCOUNTER ─────────────────────────
+  if (obj.type === 'encounter') {
+    obj.triggered = true
 
-    if (obj.itemId) {
-      inventory.add(obj.itemId)
-      obj.triggered = true
-      // Remove visual
-      obj.sprite.setVisible(false)
-    }
+    this.scene.events.emit('startEncounter', {
+      encounterId: obj.encounterId,
+      enemy: obj.enemy
+    })
 
-    if (obj.dialogueKey) {
-      // Pause world, launch dialogue overlay
-      this.scene.scene.pause('WorldScene')
-      if (!this.scene.scene.isActive('DialogueScene')) {
-        dialogueSystem.start(obj.dialogueKey, () => {
-          // onComplete handled by DialogueScene resuming WorldScene
-        })
-        this.scene.scene.launch('DialogueScene')
-      }
-    }
-
-    obj.onInteract?.()
+    return
   }
+
+  // ── NORMAL LOGIC ──────────────────────
+  if (obj.type === 'trigger') {
+    obj.triggered = true
+  }
+
+  if (obj.itemId) {
+    inventory.add(obj.itemId)
+    obj.triggered = true
+    obj.sprite.setVisible(false)
+  }
+
+  if (obj.dialogueKey) {
+    this.scene.scene.pause('WorldScene')
+
+    if (!this.scene.scene.isActive('DialogueScene')) {
+      dialogueSystem.start(obj.dialogueKey, () => {})
+      this.scene.scene.launch('DialogueScene')
+    }
+  }
+
+  obj.onInteract?.()
+}
 
   // Auto-fire story triggers (no keypress needed — on proximity)
   checkAutoTriggers(playerX: number, playerY: number) {

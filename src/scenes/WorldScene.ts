@@ -110,6 +110,14 @@ export class WorldScene extends Phaser.Scene {
 
     // Populate NPCs / objects / exits for this map
     this.buildMapObjects(this.currentMapId, map)
+    // ── ENCOUNTER EVENTS ─────────────────────────
+    this.events.on('startEncounter', (data: any) => {
+      this.startEncounter(data)
+    })
+
+    this.events.on('battleComplete', (data: any) => {
+      this.onBattleComplete(data)
+    })
 
     // ── UI OVERLAY ────────────────────────────────────────────────────────
     this.scene.launch('UIScene', { worldScene: this, mapLabel: cfg.label })
@@ -218,9 +226,49 @@ export class WorldScene extends Phaser.Scene {
 
       // Exit back
       this.addDoor(1 * TS, 10 * TS, 'bandra-route', 27 * TS, 10 * TS, 'BANDRA → KURLA CORRIDOR')
+      // ── ENCOUNTERS ─────────────────────────
+
+      // First enemy
+      this.interactions.register({
+        type: 'encounter',
+        sprite: this.add.rectangle(10 * TS, 10 * TS, 20, 20, 0xff0000, 0.3),
+        bounds: new Phaser.Geom.Rectangle(10 * TS - 16, 10 * TS - 16, 32, 32),
+        encounterId: 'veil_1',
+        enemy: 'veil_scout'
+      })
+
+      // Second enemy
+      this.interactions.register({
+        type: 'encounter',
+        sprite: this.add.rectangle(18 * TS, 10 * TS, 20, 20, 0xff0000, 0.3),
+        bounds: new Phaser.Geom.Rectangle(18 * TS - 16, 18 * TS - 16, 32, 32),
+        encounterId: 'veil_2',
+        enemy: 'veil_scout'
+      })
     }
   }
+  startEncounter(data: any) {
+  this.scene.pause('WorldScene')
+  this.scene.pause('UIScene')
 
+  this.scene.launch('BattleScene', {
+    encounterId: data.encounterId,
+    enemy: data.enemy
+  })
+}
+
+onBattleComplete({ encounterId, result }: any) {
+  console.log('Battle finished:', result)
+
+  if (result === 'win') {
+    // Hide encounter zone (enemy cleared)
+    const obj = (this.interactions as any).objects.find(
+      (o: any) => o.encounterId === encounterId
+    )
+
+    if (obj?.sprite) obj.sprite.setVisible(false)
+  }
+}
   // ── HELPERS ───────────────────────────────────────────────────────────────
 
   private addNPC(

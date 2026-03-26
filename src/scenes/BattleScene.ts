@@ -14,6 +14,7 @@ interface Combatant {
 }
 
 export class BattleScene extends Phaser.Scene {
+  private encounterId!: string
   private player!: Combatant
   private enemy!: Combatant
   private playerHpBar!: Phaser.GameObjects.Rectangle
@@ -31,7 +32,7 @@ export class BattleScene extends Phaser.Scene {
     super({ key: 'BattleScene' })
   }
 
-  create() {
+  create(data: any) {
     const W = 960
 
     // Background
@@ -51,6 +52,7 @@ export class BattleScene extends Phaser.Scene {
     this.round = 1
     this.playerTurn = true
     this.battleActive = true
+    this.encounterId = data.encounterId
 
     this.buildUI(W)
     this.log(`══ BATTLE START — Round 1 ══`)
@@ -264,6 +266,14 @@ export class BattleScene extends Phaser.Scene {
     }).setOrigin(0.5).setInteractive()
     back.on('pointerdown', () => {
       this.scene.stop('BattleScene')
+
+      const world = this.scene.get('WorldScene')
+
+      world.events.emit('battleComplete', {
+        encounterId: this.encounterId,
+        result: win ? 'win' : 'lose'
+      })
+
       this.scene.resume('WorldScene')
       this.scene.resume('UIScene')
     })
