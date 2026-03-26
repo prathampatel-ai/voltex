@@ -13,7 +13,7 @@ export interface Interactable {
   bounds: Phaser.Geom.Rectangle   // world-space bounds for overlap check
   dialogueKey?: string
   itemId?: string                  // for chest: item to give
-  triggered?: boolean              // one-shot triggers won't re-fire
+  triggered?: boolean              // one-shot triggers won't re-fire after activation
   onInteract?: () => void
   // Door-specific
   targetMap?: string
