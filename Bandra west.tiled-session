@@ -1,12 +1,21 @@
 {
-    "activeFile": "",
+    "activeFile": "untitled.tmx",
     "expandedProjectPaths": [
     ],
     "fileStates": {
         "#voltex-tiles": {
             "scaleInEditor": 1
         },
+        "untitled.tmx": {
+            "scale": 0.72,
+            "selectedLayer": 1,
+            "viewCenter": {
+                "x": 254.86111111111114,
+                "y": 300.69444444444446
+            }
+        },
         "untitled.tmx#voltex-tiles": {
+            "scaleInDock": 1,
             "scaleInEditor": 1
         }
     },
@@ -15,9 +24,11 @@
     "map.lastUsedExportFilter": "All Files (*)",
     "map.lastUsedFormat": "tmx",
     "openFiles": [
+        "untitled.tmx"
     ],
     "project": "Bandra west.tiled-project",
     "recentFiles": [
+        "untitled.tmx"
     ],
     "tileset.embedInMap": true
 }
