@@ -35,6 +35,8 @@ const MAP_CONFIGS: Record<string, {
 }
 
 export class WorldScene extends Phaser.Scene {
+  private blastTriggered = false
+  private civilians: Phaser.GameObjects.Components.Visible[] = []
   private player!: Phaser.Physics.Arcade.Sprite
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd!: Record<string, Phaser.Input.Keyboard.Key>
@@ -44,8 +46,8 @@ export class WorldScene extends Phaser.Scene {
   private mapHeight = 0
   private interactions!: InteractionSystem
   private transitions!: ZoneTransitionSystem
-  private currentMapId = 'bandra-west'
-
+  private currentMapId = 'kurla-junction'
+  private enemiesDefeated = 0
   constructor() { super({ key: 'WorldScene' }) }
 
   create() {
@@ -78,8 +80,13 @@ export class WorldScene extends Phaser.Scene {
     g.generateTexture('player', 20, 24)
     g.destroy()
 
-    const spawnX = (this.registry.get('spawnX') as number | undefined) ?? this.mapWidth / 2
-    const spawnY = (this.registry.get('spawnY') as number | undefined) ?? this.mapHeight / 2
+    let spawnX = this.mapWidth / 2
+    let spawnY = this.mapHeight / 2
+
+    if (this.currentMapId === 'kurla-junction') {
+      spawnX = 4 * 32
+      spawnY = 10 * 32
+    }
     this.registry.remove('nextMap')
     this.registry.remove('spawnX')
     this.registry.remove('spawnY')
@@ -150,6 +157,9 @@ export class WorldScene extends Phaser.Scene {
       this.scene.pause('UIScene')
       this.scene.launch('BattleScene')
     })
+    this.time.delayedCall(300, () => {
+    this.startIntroDialogue()
+})
   }
 
   // ── MAP OBJECT BUILDER ───────────────────────────────────────────────────
@@ -208,11 +218,12 @@ export class WorldScene extends Phaser.Scene {
     } else if (mapId === 'kurla-junction') {
       // Story trigger — fires once on arrival
       this.interactions.register({
-        type: 'trigger',
-        sprite: this.add.rectangle(0, 0, 0, 0).setVisible(false),
-        bounds: new Phaser.Geom.Rectangle(3 * TS, 8 * TS, 5 * TS, 5 * TS),
-        dialogueKey: 'story_kurla_arrival',
-      })
+      type: 'trigger',
+      sprite: this.add.rectangle(0, 0, 0, 0).setVisible(false),
+      bounds: new Phaser.Geom.Rectangle(10 * TS, 8 * TS, 6 * TS, 6 * TS),
+      onInteract: () => {},
+      dialogueKey: 'kurla_blast_trigger'
+    })
 
       // Kurla NPCs
       this.addNPC(8 * TS, 9 * TS, '🧑', '#d0d8f0', 'kurla_survivor')
@@ -226,25 +237,6 @@ export class WorldScene extends Phaser.Scene {
 
       // Exit back
       this.addDoor(1 * TS, 10 * TS, 'bandra-route', 27 * TS, 10 * TS, 'BANDRA → KURLA CORRIDOR')
-      // ── ENCOUNTERS ─────────────────────────
-
-      // First enemy
-      this.interactions.register({
-        type: 'encounter',
-        sprite: this.add.rectangle(10 * TS, 10 * TS, 20, 20, 0xff0000, 0.3),
-        bounds: new Phaser.Geom.Rectangle(10 * TS - 16, 10 * TS - 16, 32, 32),
-        encounterId: 'veil_1',
-        enemy: 'veil_scout'
-      })
-
-      // Second enemy
-      this.interactions.register({
-        type: 'encounter',
-        sprite: this.add.rectangle(18 * TS, 10 * TS, 20, 20, 0xff0000, 0.3),
-        bounds: new Phaser.Geom.Rectangle(18 * TS - 16, 18 * TS - 16, 32, 32),
-        encounterId: 'veil_2',
-        enemy: 'veil_scout'
-      })
     }
   }
   startEncounter(data: any) {
@@ -256,18 +248,105 @@ export class WorldScene extends Phaser.Scene {
     enemy: data.enemy
   })
 }
+startIntroDialogue() {
+  this.scene.pause('WorldScene')
 
+  dialogueSystem.start('kurla_intro', () => {
+    this.scene.resume('WorldScene')
+  })
+
+  this.scene.launch('DialogueScene')
+}
+startBlastSequence() {
+  if (this.blastTriggered) return
+  this.blastTriggered = true
+
+  const cam = this.cameras.main
+
+  cam.flash(600, 255, 255, 255)
+  cam.shake(600, 0.02)
+
+  const overlay = this.add.rectangle(
+    cam.scrollX + cam.width / 2,
+    cam.scrollY + cam.height / 2,
+    cam.width,
+    cam.height,
+    0xff0000,
+    0.2
+  ).setDepth(100)
+
+  this.time.delayedCall(700, () => {
+
+    this.civilians.forEach((c: any) => c.setVisible(false))
+    overlay.destroy()
+
+    // 🔥 CORRECT DIALOGUE
+    this.scene.pause('WorldScene')
+
+    dialogueSystem.start('kurla_blast', () => {
+      this.scene.resume('WorldScene')
+      this.spawnKurlaEnemies()
+    })
+
+    this.scene.launch('DialogueScene')
+  })
+}
+spawnKurlaEnemies() {
+  const TS = 32
+
+  const spawn = (id: string, x: number, y: number, enemyType: string) => {
+    const sprite = this.add.text(x, y, '⚠️', {
+      fontSize: '28px',
+      backgroundColor: '#000'
+    }).setOrigin(0.5).setDepth(5)
+
+    this.interactions.register({
+      type: 'encounter',
+      sprite,
+      bounds: new Phaser.Geom.Rectangle(x - 30, y - 30, 60, 60),
+      encounterId: id,
+      enemy: enemyType
+    })
+  }
+
+  spawn('veil_1', 12 * TS, 10 * TS, 'veil_1v1')
+  spawn('veil_2', 16 * TS, 10 * TS, 'veil_1v2')
+  spawn('veil_3', 20 * TS, 10 * TS, 'veil_boss')
+}
 onBattleComplete({ encounterId, result }: any) {
-  console.log('Battle finished:', result)
-
   if (result === 'win') {
-    // Hide encounter zone (enemy cleared)
+    this.enemiesDefeated++
+
     const obj = (this.interactions as any).objects.find(
       (o: any) => o.encounterId === encounterId
     )
 
     if (obj?.sprite) obj.sprite.setVisible(false)
+
+    // All enemies cleared
+    if (this.enemiesDefeated >= 3) {
+      this.unlockExit()
+    }
   }
+}
+unlockExit() {
+  const TS = 32
+
+  this.add.text(26 * TS, 10 * TS, '🚪', { fontSize: '22px' })
+
+  this.interactions.register({
+    type: 'trigger',
+    sprite: this.add.rectangle(0, 0, 0, 0).setVisible(false),
+    bounds: new Phaser.Geom.Rectangle(26 * TS, 10 * TS, 40, 40),
+    onInteract: () => {
+      this.scene.pause('WorldScene')
+      dialogueSystem.start('kurla_blast', () => {
+        this.spawnKurlaEnemies()
+      })
+
+      this.scene.launch('DialogueScene')
+    }
+  })
 }
   // ── HELPERS ───────────────────────────────────────────────────────────────
 
@@ -310,6 +389,7 @@ onBattleComplete({ encounterId, result }: any) {
         hasSpoken = true
       },
     })
+    this.civilians.push(circle, icon)
   }
 
   private addSign(x: number, y: number, dialogueKey: string) {
@@ -365,6 +445,21 @@ onBattleComplete({ encounterId, result }: any) {
 
   // ── UPDATE ────────────────────────────────────────────────────────────────
   update() {
+    // ── BLAST MANUAL CHECK ──
+    if (!this.blastTriggered) {
+      const px = this.player.x
+      const py = this.player.y
+
+      const inBlastZone =
+        px > 10 * 32 &&
+        px < 16 * 32 &&
+        py > 8 * 32 &&
+        py < 14 * 32
+
+      if (inBlastZone) {
+        this.startBlastSequence()
+      }
+    }
     if (dialogueSystem.isActive) {
       this.player.setVelocity(0)
       return

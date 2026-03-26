@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VOLTEX — Battle Engine v3</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Bebas+Neue&family=Noto+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #07090f;
+  --panel:   #0c1020;
+  --panel2:  #111828;
+  --border:  #1c2438;
+  --border2: #263050;
+  --accent:  #4d7fff;
+  --fire:    #ff6b35;
+  --gold:    #ffbe3d;
+  --green:   #3dd68c;
+  --red:     #ff3d5a;
+  --purple:  #a855f7;
+  --cyan:    #22d3ee;
+  --text:    #c0cce8;
+  --muted:   #526080;
+  --hp:      #3dd68c;
+  --wil:     #4d7fff;
+  --sta:     #ffbe3d;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); font-family: 'Noto Sans', sans-serif; color: var(--text); user-select: none; }
+
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.screen.hidden { display: none; }
+
+/* scanlines */
+#battle::after {
+  content: ''; position: absolute; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.05) 3px, rgba(0,0,0,0.05) 4px);
+  pointer-events: none; z-index: 999;
+}
+
+/* ─── HEADER ─── */
+.bh {
+  flex-shrink: 0; height: 38px;
+  background: var(--panel); border-bottom: 1px solid var(--border2);
+  display: flex; align-items: center; justify-content: space-between; padding: 0 16px;
+}
+.bh-logo { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 8px; color: var(--accent); }
+.bh-mid  { display: flex; align-items: center; gap: 10px; }
+.bh-round { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--muted); background: var(--panel2); border: 1px solid var(--border); padding: 3px 10px; border-radius: 3px; }
+.bh-turn  { font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: 2px; padding: 3px 10px; border-radius: 3px; }
+.bh-turn.lucky { color: var(--accent); background: rgba(77,127,255,0.1); border: 1px solid rgba(77,127,255,0.3); }
+.bh-turn.ally  { color: var(--green);  background: rgba(61,214,140,0.08); border: 1px solid rgba(61,214,140,0.25); }
+.bh-turn.enemy { color: var(--red);    background: rgba(255,61,90,0.1);   border: 1px solid rgba(255,61,90,0.3); }
+.mode-label { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--muted); }
+
+/* ─── ARENA ─── */
+.arena {
+  flex-shrink: 0; height: 230px; position: relative;
+  background: linear-gradient(180deg, #07090f 0%, #0a0e1c 55%, #0d1428 100%);
+  border-bottom: 1px solid var(--border); overflow: hidden;
+  display: flex; align-items: flex-end; padding: 0 16px 14px; gap: 0;
+}
+.arena::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 25% 80%, rgba(77,127,255,0.07) 0%, transparent 50%),
+              radial-gradient(ellipse at 75% 80%, rgba(255,61,90,0.06)  0%, transparent 50%);
+  pointer-events: none;
+}
+.arena::after {
+  content: ''; position: absolute; bottom: 54px; left: 5%; right: 5%; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border2) 20%, var(--border2) 80%, transparent);
+}
+.arena-side { display: flex; align-items: flex-end; gap: 10px; position: relative; z-index: 2; }
+.arena-side.allies  { flex: 1; justify-content: flex-start; }
+.arena-side.enemies { flex: 1; justify-content: flex-end; }
+.vs-badge {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 6px;
+  color: var(--border2); z-index: 1; pointer-events: none;
+}
+
+/* ─── VOLT SPRITE ─── */
+.volt-sprite { display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative; transition: transform 0.15s; }
+
+/* active turn glow */
+.volt-sprite.active-turn .sprite-body { box-shadow: 0 0 0 2px var(--gold), 0 0 16px rgba(255,190,61,0.45); }
+
+/* targeted enemy gets red ring */
+.volt-sprite.targeted .sprite-body { box-shadow: 0 0 0 2px var(--red), 0 0 12px rgba(255,61,90,0.4); }
+
+/* fainted */
+.volt-sprite.fainted { opacity: 0.28; filter: grayscale(1); pointer-events: none; }
+
+.sprite-body {
+  width: 54px; height: 54px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 25px;
+  border: 2px solid var(--border2); background: var(--panel2);
+  transition: box-shadow 0.2s;
+}
+.sprite-body.ally  { border-color: rgba(77,127,255,0.5); background: rgba(77,127,255,0.1); }
+.sprite-body.lucky { border-color: rgba(77,127,255,0.8); background: rgba(77,127,255,0.15); box-shadow: 0 0 8px rgba(77,127,255,0.3); }
+.sprite-body.enemy { border-color: rgba(255,61,90,0.5);  background: rgba(255,61,90,0.1); }
+
+.turn-arrow {
+  position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
+  font-size: 10px; color: var(--gold); display: none;
+  animation: bounce 0.8s infinite alternate;
+}
+.volt-sprite.active-turn .turn-arrow { display: block; }
+@keyframes bounce { from{transform:translateX(-50%) translateY(0)}to{transform:translateX(-50%) translateY(-4px)} }
+
+.sprite-hp-wrap { width: 54px; display: flex; flex-direction: column; gap: 2px; }
+.sprite-hp-track { width: 100%; height: 5px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+.sprite-hp-fill  { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #1f8a52, var(--hp)); transition: width 0.4s ease; }
+.sprite-hp-fill.warn { background: linear-gradient(90deg, #b37a00, var(--gold)); }
+.sprite-hp-fill.crit { background: linear-gradient(90deg, #8b1a2c, var(--red)); animation: hppulse 1s infinite; }
+@keyframes hppulse { 0%,100%{opacity:1}50%{opacity:0.5} }
+
+.sprite-wil-track { width: 100%; height: 3px; background: rgba(255,255,255,0.04); border-radius: 2px; overflow: hidden; }
+.sprite-wil-fill  { height: 100%; border-radius: 2px; background: var(--wil); transition: width 0.4s ease; }
+
+.sprite-name { font-family: 'Share Tech Mono', monospace; font-size: 8px; color: var(--muted); text-align: center; white-space: nowrap; }
+.sprite-statuses { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; max-width: 60px; }
+.mc { font-size: 7px; font-family: 'Share Tech Mono', monospace; padding: 0 3px; border-radius: 2px; }
+.mc.burn     { background: rgba(255,107,53,0.25); color: var(--fire); }
+.mc.stun     { background: rgba(255,190,61,0.2);  color: var(--gold); }
+.mc.pressure { background: rgba(34,211,238,0.15); color: var(--cyan); }
+.mc.exhaust  { background: rgba(255,61,90,0.2);   color: var(--red); }
+.mc.guard    { background: rgba(61,214,140,0.15); color: var(--green); }
+.mc.suppress { background: rgba(168,85,247,0.15); color: var(--purple); }
+.mc.poison   { background: rgba(168,85,247,0.15); color: var(--purple); }
+
+@keyframes hitshake { 0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)} }
+.volt-sprite.hit { animation: hitshake 0.3s ease; }
+
+/* ─── DETAIL BAR ─── */
+.detail-bar {
+  flex-shrink: 0; height: 50px;
+  background: var(--panel2); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px; padding: 0 14px; overflow: hidden;
+}
+.d-avatar { font-size: 18px; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--panel); border: 1px solid var(--border2); flex-shrink: 0; }
+.d-info { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.d-name { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.d-bars { display: flex; gap: 6px; align-items: center; }
+.db-wrap { display: flex; align-items: center; gap: 3px; }
+.db-label { font-family: 'Share Tech Mono', monospace; font-size: 8px; color: var(--muted); width: 20px; }
+.db-track { width: 72px; height: 5px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+.db-fill  { height: 100%; border-radius: 3px; transition: width 0.4s; }
+.db-fill.hp  { background: linear-gradient(90deg, #1f8a52, var(--hp)); }
+.db-fill.sta { background: linear-gradient(90deg, #b38a2a, var(--sta)); }
+.db-fill.wil { background: linear-gradient(90deg, #2a4fcc, var(--wil)); }
+.db-num { font-family: 'Share Tech Mono', monospace; font-size: 8px; color: var(--muted); white-space: nowrap; }
+.d-tags { display: flex; gap: 3px; align-items: center; flex-shrink: 0; }
+.dtag { font-family: 'Share Tech Mono', monospace; font-size: 8px; padding: 1px 5px; border-radius: 2px; background: var(--panel); border: 1px solid var(--border); }
+.dtag.lightning { color: var(--accent);  border-color: rgba(77,127,255,0.4); }
+.dtag.fire      { color: var(--fire);    border-color: rgba(255,107,53,0.4); }
+.dtag.storm     { color: var(--cyan);    border-color: rgba(34,211,238,0.4); }
+.dtag.water     { color: #60a5fa;        border-color: rgba(96,165,250,0.4); }
+.dtag.earth     { color: #a3855a;        border-color: rgba(163,133,90,0.4); }
+.dtag.null      { color: var(--purple);  border-color: rgba(168,85,247,0.4); }
+.dtag.nature    { color: var(--green);   border-color: rgba(61,214,140,0.4); }
+.dtag.idx       { color: var(--gold);    border-color: rgba(255,190,61,0.3); }
+
+/* ─── COMBAT LOG ─── */
+.combat-log {
+  flex-shrink: 0; height: 68px;
+  background: var(--panel); border-bottom: 1px solid var(--border);
+  padding: 5px 14px; overflow-y: auto;
+  font-family: 'Share Tech Mono', monospace; font-size: 10.5px; line-height: 1.65;
+}
+.combat-log::-webkit-scrollbar { width: 3px; }
+.combat-log::-webkit-scrollbar-thumb { background: var(--border2); }
+.ll { animation: slidein 0.15s ease; }
+@keyframes slidein { from{opacity:0;transform:translateX(-4px)}to{opacity:1;transform:translateX(0)} }
+.lp  { color: var(--accent); }  .le  { color: var(--red); }
+.la  { color: var(--green); }   .ls  { color: var(--muted); }
+.ldmg { color: var(--gold); }   .lheal { color: var(--green); }
+.lstat { color: var(--purple); }.lcrit { color: #fff; }
+.lwarn { color: var(--fire); }
+
+/* ─── ACTION PANEL ─── */
+.action-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+
+/* enemy thinking bar */
+.ethink {
+  flex-shrink: 0; padding: 5px 14px; border-bottom: 1px solid var(--border);
+  font-family: 'Share Tech Mono', monospace; font-size: 9px;
+  color: var(--red); display: none; align-items: center; gap: 5px;
+}
+.ethink.active { display: flex; }
+.dots span { display: inline-block; width: 3px; height: 3px; border-radius: 50%; background: var(--red); animation: dp 1.2s infinite; margin: 0 1px; }
+.dots span:nth-child(2) { animation-delay: 0.2s; } .dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dp { 0%,80%,100%{transform:scale(0.5);opacity:0.3}40%{transform:scale(1);opacity:1} }
+
+/* tabs */
+.ptabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.ptab {
+  font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 2px;
+  padding: 6px 16px; background: none; border: none; color: var(--muted); cursor: pointer;
+  border-bottom: 2px solid transparent; transition: all 0.12s;
+}
+.ptab:hover { color: var(--text); }
+.ptab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.tab-pane { flex: 1; padding: 8px 12px; overflow-y: auto; }
+.tab-pane::-webkit-scrollbar { width: 3px; }
+.tab-pane::-webkit-scrollbar-thumb { background: var(--border2); }
+
+/* ─── SKILL + TARGET LAYOUT ─── */
+/* skill grid is now 2-column pairs: [skill btn] [target strip] */
+.skill-rows { display: flex; flex-direction: column; gap: 5px; }
+
+.skill-row { display: flex; gap: 5px; align-items: stretch; }
+
+.skbtn {
+  flex: 0 0 auto; width: 180px;
+  background: var(--panel); border: 1px solid var(--border2); border-radius: 6px;
+  padding: 7px 9px; cursor: pointer; text-align: left; position: relative; overflow: hidden;
+  transition: all 0.1s;
+}
+.skbtn::after {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, rgba(77,127,255,0.08), transparent 70%);
+  opacity: 0; transition: opacity 0.15s;
+}
+.skbtn:hover:not(:disabled)::after { opacity: 1; }
+.skbtn:hover:not(:disabled) { border-color: rgba(77,127,255,0.5); transform: translateY(-1px); }
+.skbtn.active-skill { border-color: var(--accent); background: rgba(77,127,255,0.1); }
+.skbtn.aoe { border-left: 2px solid var(--purple); }
+.skbtn:disabled { opacity: 0.28; cursor: not-allowed; transform: none; }
+
+.sk-name { font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 11px; color: var(--text); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sk-costs { display: flex; gap: 3px; flex-wrap: wrap; }
+.pip { font-family: 'Share Tech Mono', monospace; font-size: 8px; padding: 1px 4px; border-radius: 2px; }
+.pip.wil { background: rgba(77,127,255,0.15); color: var(--wil); }
+.pip.sta { background: rgba(255,190,61,0.15);  color: var(--sta); }
+.pip.dmg { background: rgba(255,61,90,0.15);   color: var(--red); }
+.pip.fx  { background: rgba(168,85,247,0.15);  color: var(--purple); }
+.pip.aoe { background: rgba(168,85,247,0.15);  color: var(--purple); }
+
+/* ─── TARGET STRIP ─── */
+/* shown inline to the right of each single-target skill */
+.target-strip {
+  flex: 1; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+}
+
+/* AoE label strip — static, no buttons */
+.aoe-label {
+  flex: 1; display: flex; align-items: center; padding: 0 8px;
+  font-family: 'Share Tech Mono', monospace; font-size: 9px; color: var(--purple);
+  gap: 5px;
+}
+
+.tgt-btn {
+  font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: 0.5px;
+  padding: 5px 10px; border-radius: 5px; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--border2); color: var(--text);
+  transition: all 0.1s; white-space: nowrap;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  min-width: 72px;
+}
+.tgt-btn:hover:not(:disabled) { border-color: var(--red); color: #fff; background: rgba(255,61,90,0.1); transform: translateY(-1px); }
+.tgt-btn.selected {
+  border-color: var(--red); background: rgba(255,61,90,0.15); color: #fff;
+  box-shadow: 0 0 0 1px var(--red), 0 0 8px rgba(255,61,90,0.3);
+}
+.tgt-btn:disabled { opacity: 0.28; cursor: not-allowed; }
+
+.tgt-name { font-size: 11px; font-family: 'Rajdhani', sans-serif; font-weight: 700; }
+.tgt-hp   { font-size: 8px; font-family: 'Share Tech Mono', monospace; color: var(--muted); }
+.tgt-hp.warn { color: var(--gold); }
+.tgt-hp.crit { color: var(--red); }
+
+/* fire button — execute immediately */
+.fire-btn {
+  font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: 1px;
+  padding: 5px 12px; border-radius: 5px; cursor: pointer;
+  background: rgba(77,127,255,0.12); border: 1px solid var(--accent); color: var(--accent);
+  transition: all 0.1s; white-space: nowrap; flex-shrink: 0;
+}
+.fire-btn:hover:not(:disabled) { background: rgba(77,127,255,0.22); transform: translateY(-1px); }
+.fire-btn:disabled { opacity: 0.28; cursor: not-allowed; }
+
+/* ─── UTIL GRID ─── */
+.util-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.ubtn {
+  background: var(--panel); border: 1px solid var(--border2); border-radius: 6px;
+  padding: 8px 5px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  font-family: 'Rajdhani', sans-serif; font-weight: 600; transition: all 0.1s;
+}
+.ubtn .icon { font-size: 16px; }
+.ubtn .ulabel { font-size: 10px; letter-spacing: 1px; color: var(--text); }
+.ubtn .usub   { font-family: 'Share Tech Mono', monospace; font-size: 7px; color: var(--muted); }
+.ubtn:hover:not(:disabled) { border-color: rgba(77,127,255,0.5); background: rgba(77,127,255,0.06); transform: translateY(-1px); }
+.ubtn:disabled { opacity: 0.28; cursor: not-allowed; }
+.ubtn.flee:hover:not(:disabled) { border-color: var(--gold); background: rgba(255,190,61,0.06); }
+
+/* ─── DAMAGE POPUP ─── */
+.dmgpop {
+  position: fixed; pointer-events: none;
+  font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 2px;
+  z-index: 500; animation: dfloat 0.85s ease-out forwards;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.9);
+}
+@keyframes dfloat { 0%{opacity:1;transform:translateY(0) scale(1.1)}15%{transform:translateY(-8px) scale(1)}100%{opacity:0;transform:translateY(-52px) scale(0.85)} }
+
+/* ─── RESULT ─── */
+#result { background: var(--bg); align-items: center; justify-content: center; gap: 0; }
+.result-glow { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 35%, rgba(77,127,255,0.07) 0%, transparent 60%); }
+.result-badge { font-family: 'Bebas Neue', sans-serif; font-size: 68px; letter-spacing: 14px; margin-bottom: 6px; position: relative; z-index: 2; animation: rin 0.5s cubic-bezier(0.175,0.885,0.32,1.275) both; }
+@keyframes rin { from{opacity:0;transform:scale(0.5) translateY(16px)}to{opacity:1;transform:scale(1) translateY(0)} }
+.result-badge.win  { color: var(--green); text-shadow: 0 0 50px rgba(61,214,140,0.5); }
+.result-badge.lose { color: var(--red);   text-shadow: 0 0 50px rgba(255,61,90,0.5); }
+.result-badge.fled { color: var(--gold);  text-shadow: 0 0 40px rgba(255,190,61,0.4); }
+.result-quote { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--muted); margin-bottom: 22px; letter-spacing: 0.5px; text-align: center; max-width: 380px; line-height: 1.7; position: relative; z-index: 2; }
+.reward-panel { background: var(--panel); border: 1px solid var(--border2); border-radius: 8px; padding: 18px 28px; min-width: 300px; max-width: 400px; display: flex; flex-direction: column; gap: 10px; position: relative; z-index: 2; animation: rin 0.5s 0.1s both; }
+.rw-title { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 4px; color: var(--muted); }
+.rw-row { display: flex; justify-content: space-between; font-family: 'Share Tech Mono', monospace; font-size: 11px; }
+.rw-label { color: var(--muted); } .rw-val { color: var(--gold); }
+.rw-val.g { color: var(--green); } .rw-val.b { color: var(--accent); }
+.xp-section { display: flex; flex-direction: column; gap: 5px; }
+.xp-head { display: flex; justify-content: space-between; font-family: 'Share Tech Mono', monospace; font-size: 9px; color: var(--muted); }
+.xp-track { height: 7px; background: rgba(255,255,255,0.04); border-radius: 4px; overflow: hidden; }
+.xp-fill  { height: 100%; background: linear-gradient(90deg, #2a4fcc, var(--accent)); border-radius: 4px; transition: width 1s ease; }
+.xp-fill.up { background: linear-gradient(90deg, #1f8a52, var(--green)); animation: xpg 0.6s infinite alternate; }
+@keyframes xpg { from{box-shadow:0 0 3px var(--green)}to{box-shadow:0 0 10px var(--green)} }
+.lvlup { text-align: center; font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 5px; color: var(--green); text-shadow: 0 0 16px rgba(61,214,140,0.6); animation: rin 0.4s 0.7s both; }
+.result-btns { display: flex; gap: 8px; margin-top: 8px; position: relative; z-index: 2; animation: rin 0.5s 0.25s both; }
+.rbtn { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 2px; padding: 9px 24px; border-radius: 5px; cursor: pointer; border: 1px solid var(--border2); background: var(--panel); color: var(--text); transition: all 0.12s; }
+.rbtn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-2px); }
+.rbtn.primary { background: rgba(77,127,255,0.1); border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- ══════ BATTLE ══════ -->
+<div class="screen" id="battle">
+  <div class="bh">
+    <div class="bh-logo">VOLTEX</div>
+    <div class="bh-mid">
+      <div class="bh-turn lucky" id="turnInd">◆ YOUR TURN</div>
+      <div class="bh-round" id="roundBadge">ROUND 01</div>
+    </div>
+    <div class="mode-label" id="modeLabel">3v3</div>
+  </div>
+
+  <div class="arena" id="arena">
+    <div class="vs-badge">VS</div>
+    <div class="arena-side allies"  id="allySide"></div>
+    <div class="arena-side enemies" id="enemySide"></div>
+  </div>
+
+  <!-- focused volt detail -->
+  <div class="detail-bar" id="detailBar">
+    <div class="d-avatar" id="dAvatar">⚡</div>
+    <div class="d-info">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="d-name" id="dName">—</div>
+        <div class="d-tags" id="dTags"></div>
+      </div>
+      <div class="d-bars">
+        <div class="db-wrap"><span class="db-label">HP</span><div class="db-track"><div class="db-fill hp" id="dHpBar" style="width:100%"></div></div><span class="db-num" id="dHpNum">—</span></div>
+        <div class="db-wrap"><span class="db-label">STA</span><div class="db-track"><div class="db-fill sta" id="dStaBar" style="width:100%"></div></div><span class="db-num" id="dStaNum">—</span></div>
+        <div class="db-wrap"><span class="db-label">WIL</span><div class="db-track"><div class="db-fill wil" id="dWilBar" style="width:100%"></div></div><span class="db-num" id="dWilNum">—</span></div>
+      </div>
+    </div>
+    <div class="d-tags" id="dTagsRight" style="flex-shrink:0"></div>
+  </div>
+
+  <div class="combat-log" id="combatLog">
+    <div class="ll ls">══ PICK A SCENARIO TO START ══</div>
+  </div>
+
+  <div class="ethink" id="ethink">
+    <span id="ethinkName">—</span> ACTING
+    <span class="dots"><span></span><span></span><span></span></span>
+  </div>
+
+  <div class="action-panel">
+    <div class="ptabs">
+      <button class="ptab active" onclick="switchTab('skills')">⚡ SKILLS</button>
+      <button class="ptab" onclick="switchTab('utility')">◈ ACTIONS</button>
+      <button class="ptab" onclick="switchTab('setup')" style="margin-left:auto;color:var(--gold)">⬡ SETUP</button>
+    </div>
+
+    <div class="tab-pane" id="tpSkills">
+      <div class="skill-rows" id="skillRows"></div>
+    </div>
+
+    <div class="tab-pane" id="tpUtil" style="display:none">
+      <div class="util-grid">
+        <button class="ubtn" onclick="doUtil('guard')"><span class="icon">🛡️</span><span class="ulabel">GUARD</span><span class="usub">−30% DMG</span></button>
+        <button class="ubtn" onclick="doUtil('focus')"><span class="icon">🔵</span><span class="ulabel">FOCUS</span><span class="usub">WIL +40%</span></button>
+        <button class="ubtn" onclick="doUtil('rest')"><span class="icon">💤</span><span class="ulabel">REST</span><span class="usub">+50% BOTH</span></button>
+        <button class="ubtn flee" onclick="doUtil('flee')"><span class="icon">💨</span><span class="ulabel">FLEE</span><span class="usub">60% CHANCE</span></button>
+        <button class="ubtn" onclick="doItem('spark_s')"><span class="icon">⚗️</span><span class="ulabel">SPARK S</span><span class="usub">WIL +20%</span></button>
+        <button class="ubtn" onclick="doItem('spark_m')"><span class="icon">💠</span><span class="ulabel">SPARK M</span><span class="usub">WIL +40%</span></button>
+        <button class="ubtn" onclick="doItem('stampack')"><span class="icon">💊</span><span class="ulabel">STA PACK</span><span class="usub">STA +25%</span></button>
+        <button class="ubtn" onclick="doItem('coolant')"><span class="icon">❄️</span><span class="ulabel">COOLANT</span><span class="usub">CLEAR BURN</span></button>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="tpSetup" style="display:none">
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:2px">SELECT ENCOUNTER</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px" id="scenarioGrid"></div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);line-height:1.8;margin-top:4px">
+          YOU control LUCKYFER only. Allies act automatically.<br>
+          AoE skills hit all enemies. Single-target: pick your mark.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ RESULT ══════ -->
+<div class="screen hidden" id="result">
+  <div class="result-glow"></div>
+  <div class="result-badge" id="rBadge">VICTORY</div>
+  <div class="result-quote" id="rQuote"></div>
+  <div class="reward-panel" id="rPanel">
+    <div class="rw-title">⬡ BATTLE REWARDS</div>
+    <div class="rw-row"><span class="rw-label">XP EARNED</span><span class="rw-val" id="rXP">+0</span></div>
+    <div class="rw-row"><span class="rw-label">ROUNDS</span><span class="rw-val b" id="rRounds">—</span></div>
+    <div class="rw-row"><span class="rw-label">HIGHEST HIT</span><span class="rw-val" id="rMaxDmg">—</span></div>
+    <div class="xp-section">
+      <div class="xp-head"><span>VOLT INDEX</span><span id="rXpLabel">0/400</span></div>
+      <div class="xp-track"><div class="xp-fill" id="rXpFill" style="width:0%"></div></div>
+    </div>
+    <div class="lvlup" id="rLvlup" style="display:none">◆ INDEX ADVANCED ◆</div>
+  </div>
+  <div class="result-btns">
+    <button class="rbtn primary" onclick="goBack()">NEW ENCOUNTER</button>
+    <button class="rbtn" onclick="rematch()">REMATCH</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  SKILL DB
+// ═══════════════════════════════════════════════════
+const params = new URLSearchParams(window.location.search)
+const enemyType = params.get('enemy') || 'veil_1v1'
+const SK = {
+  L1:  { name:'Lightning Sparks', sta:0,  wil:10, base:30,  el:'lightning', hits:1 },
+  L5:  { name:'Overload',         sta:0,  wil:60, base:80,  el:'lightning', hits:1, stun:1 },
+  L6:  { name:'Thunder Beam',     sta:0,  wil:50, base:95,  el:'lightning', hits:1 },
+  L8:  { name:'Arc Chain',        sta:0,  wil:70, base:85,  el:'lightning', hits:3, chainDecay:0.8, aoe:true },
+  S1:  { name:'Pressure Tap',     sta:0,  wil:10, base:20,  el:'storm',     hits:1, pressure:1 },
+  S5:  { name:'Concussion Burst', sta:15, wil:40, base:65,  el:'storm',     hits:1, stun:1, aoe:true },
+  F1:  { name:'Ember Shot',       sta:0,  wil:10, base:22,  el:'fire',  hits:1, burn:1 },
+  F5:  { name:'Incinerate',       sta:0,  wil:55, base:90,  el:'fire',  hits:1, stun:1 },
+  F6:  { name:'Flame Beam',       sta:0,  wil:50, base:100, el:'fire',  hits:1 },
+  F10: { name:'Flame Frenzy',     sta:30, wil:70, base:55,  el:'fire',  hits:5, aoe:true },
+  X1:  { name:'Signal Tap',       sta:0,  wil:10, base:18,  el:'null',  hits:1 },
+  X5:  { name:'Dampener',         sta:0,  wil:55, base:45,  el:'null',  hits:1, suppress:1 },
+  X6:  { name:'Null Beam',        sta:0,  wil:50, base:80,  el:'null',  hits:1 },
+  X10: { name:'Signal Void',      sta:0,  wil:90, base:30,  el:'null',  hits:1, suppressAll:true, aoe:true },
+  W1:  { name:'Aqua Shot',        sta:0,  wil:10, base:20,  el:'water', hits:1 },
+  W5:  { name:'Hydro Blast',      sta:0,  wil:55, base:85,  el:'water', hits:1, stun:1 },
+  W6:  { name:'Water Beam',       sta:0,  wil:50, base:88,  el:'water', hits:1 },
+  E1:  { name:'Stone Throw',      sta:10, wil:5,  base:28,  el:'earth', hits:1 },
+  E5:  { name:'Tremor Strike',    sta:15, wil:50, base:75,  el:'earth', hits:1, stun:1 },
+  E6:  { name:'Reshape',          sta:20, wil:60, base:90,  el:'earth', hits:1 },
+  N1:  { name:'Spore Shot',       sta:0,  wil:10, base:18,  el:'nature',hits:1, poison:1 },
+  N5:  { name:'Overgrowth',       sta:0,  wil:50, base:55,  el:'nature',hits:1, aoe:true, poison:1 },
+  N6:  { name:'Toxin Pulse',      sta:0,  wil:60, base:70,  el:'nature',hits:1, stun:1 },
+};
+
+// ═══════════════════════════════════════════════════
+//  VOLT DEFINITIONS
+// ═══════════════════════════════════════════════════
+const DEFS = {
+  luckyfer: { id:'luckyfer', name:'LUCKYFER', emoji:'⚡', team:'ally', playerControlled:true,
+    maxHp:164, maxSta:120, maxWil:170, atk:52, def:30, spd:22, level:8,
+    elements:['lightning','storm'], skills:['L1','L5','L6','L8','S1','S5'],
+    quote:{ win:'', lose:'' } },
+  priya:  { id:'priya',  name:'PRIYA',  emoji:'🌊', team:'ally', playerControlled:false,
+    maxHp:195, maxSta:110, maxWil:200, atk:62, def:38, spd:28, level:11,
+    elements:['water','storm'], skills:['W1','W5','W6','S1','S5'],
+    quote:{ win:'', lose:'' } },
+  zara:   { id:'zara',   name:'ZARA',   emoji:'🪨', team:'ally', playerControlled:false,
+    maxHp:240, maxSta:150, maxWil:130, atk:58, def:55, spd:18, level:10,
+    elements:['earth'], skills:['E1','E5','E6'],
+    quote:{ win:'', lose:'' } },
+  meera:  { id:'meera',  name:'MEERA',  emoji:'🌿', team:'ally', playerControlled:false,
+    maxHp:175, maxSta:100, maxWil:185, atk:50, def:28, spd:20, level:9,
+    elements:['nature'], skills:['N1','N5','N6'],
+    quote:{ win:'', lose:'' } },
+  aryan:  { id:'aryan',  name:'ARYAN',  emoji:'🔥', team:'enemy',
+    maxHp:420, maxSta:158, maxWil:280, atk:108, def:65, spd:43, level:22,
+    elements:['fire'], skills:['F1','F5','F6','F10'],
+    quote:{ win:'"Offer still stands, Lucky."', lose:'"You need more time."' } },
+  veil1:  { id:'veil1',  name:'VEIL OPS', emoji:'🌑', team:'enemy',
+    maxHp:310, maxSta:130, maxWil:240, atk:88, def:48, spd:38, level:18,
+    elements:['null'], skills:['X1','X5','X6'],
+    quote:{ win:'The operative retreats.', lose:'Signal lost.' } },
+  veil2:  { id:'veil2',  name:'CIPHER',   emoji:'🔇', team:'enemy',
+    maxHp:280, maxSta:120, maxWil:260, atk:80, def:44, spd:35, level:16,
+    elements:['null'], skills:['X1','X6','X10'],
+    quote:{ win:'', lose:'' } },
+  rahu:   { id:'rahu',   name:'RAHU',     emoji:'💀', team:'enemy',
+    maxHp:520, maxSta:180, maxWil:340, atk:135, def:72, spd:50, level:30,
+    elements:['fire'], skills:['F1','F5','F6','F10'],
+    quote:{ win:'"You\'re not ready. Not yet."', lose:'"Interesting."' } },
+  bsc1:   { id:'bsc1',   name:'BSC AGENT', emoji:'🔹', team:'enemy',
+    maxHp:270, maxSta:120, maxWil:200, atk:72, def:42, spd:34, level:15,
+    elements:['water'], skills:['W1','W5','W6'],
+    quote:{ win:'"Registration is still open."', lose:'Files incident report.' } },
+};
+
+const SCENARIOS = [
+  { label:'1v1 · ARYAN',   allies:['luckyfer'],               enemies:['aryan'],            xp:200, quote:'Chapter 3 — Old Friends.' },
+  { label:'1v1 · RAHU',    allies:['luckyfer'],               enemies:['rahu'],             xp:400, quote:'Chapter 3 — The fire Volt.' },
+  { label:'2v2 · VEIL',    allies:['luckyfer','priya'],       enemies:['veil1','veil2'],    xp:280, quote:'Lower Parel mills — VEIL cell.' },
+  { label:'3v2 · BSC',     allies:['luckyfer','zara','priya'],enemies:['bsc1','veil1'],     xp:320, quote:'Kurla Junction — BSC response.' },
+  { label:'3v3 · FULL',    allies:['luckyfer','priya','zara'],enemies:['aryan','veil1','bsc1'], xp:450, quote:'Chapter 5 convergence.' },
+  { label:'3v3 · ASHURA',  allies:['luckyfer','priya','meera'],enemies:['rahu','veil1','veil2'], xp:600, quote:'Dharavi Grid — Final stand.' },
+];
+
+// ═══════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════
+let allies = [], enemies = [];
+let turnOrder = [], turnIndex = 0;
+let round = 1, battleActive = false, actionLocked = false;
+let lastTargetId = null;   // ← persists across Luckyfer's turns
+let maxDmgHit = 0;
+let playerXP = 0, playerLevel = 8;
+let currentScenario = null;
+const XP_TABLE = [0,100,200,350,550,800,1100,1500,2000,2600,3300];
+
+// ═══════════════════════════════════════════════════
+//  SCENARIO SETUP
+// ═══════════════════════════════════════════════════
+function buildSetupTab() {
+  const g = document.getElementById('scenarioGrid');
+  g.innerHTML = '';
+  SCENARIOS.forEach((s, i) => {
+    const btn = document.createElement('button');
+    btn.style.cssText = 'background:var(--panel);border:1px solid var(--border2);border-radius:6px;padding:8px 10px;cursor:pointer;text-align:left;transition:all 0.12s;';
+    btn.innerHTML = `<div style="font-family:Rajdhani,sans-serif;font-weight:700;font-size:11px;color:var(--text);margin-bottom:1px">${s.label}</div><div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted)">${s.allies.length}v${s.enemies.length} · ${s.xp} XP</div>`;
+    btn.onmouseenter = () => btn.style.borderColor = 'rgba(77,127,255,0.5)';
+    btn.onmouseleave = () => btn.style.borderColor = 'var(--border2)';
+    btn.onclick = () => startScenario(i);
+    g.appendChild(btn);
+  });
+}
+
+function startScenario(idx) {
+  const sc = SCENARIOS[idx];
+  currentScenario = sc;
+  allies  = sc.allies.map(id  => ({ ...DEFS[id],  hp:DEFS[id].maxHp,  sta:DEFS[id].maxSta,  wil:DEFS[id].maxWil,  statuses:[], fainted:false }));
+  enemies = sc.enemies.map(id => ({ ...DEFS[id],  hp:DEFS[id].maxHp,  sta:DEFS[id].maxSta,  wil:DEFS[id].maxWil,  statuses:[], fainted:false }));
+
+  round = 1; maxDmgHit = 0; battleActive = true; actionLocked = false; lastTargetId = null;
+  rebuildTurnOrder(); turnIndex = 0;
+
+  document.getElementById('modeLabel').textContent = `${allies.length}v${enemies.length}`;
+  buildArena();
+  updateAllUI();
+  clearLog();
+  clog(`══ ${sc.label} · ${sc.quote} ══`, 'ls');
+
+  // Focus Luckyfer always
+  const lucky = allies.find(v => v.id === 'luckyfer');
+  if (lucky) focusVolt(lucky);
+
+  switchTab('skills');
+  advanceToNextTurn(true);
+}
+
+function rebuildTurnOrder() {
+  turnOrder = [...allies, ...enemies].filter(v => !v.fainted).sort((a,b) => b.spd - a.spd);
+}
+
+function currentActor() { return turnOrder[turnIndex % turnOrder.length]; }
+function isLuckyferTurn() { const a = currentActor(); return a && a.id === 'luckyfer'; }
+
+// ═══════════════════════════════════════════════════
+//  ARENA
+// ═══════════════════════════════════════════════════
+function buildArena() {
+  document.getElementById('allySide').innerHTML = '';
+  document.getElementById('enemySide').innerHTML = '';
+  allies.forEach(v  => document.getElementById('allySide').appendChild(makeSprite(v)));
+  enemies.forEach(v => document.getElementById('enemySide').appendChild(makeSprite(v)));
+}
+
+function makeSprite(v) {
+  const el = document.createElement('div');
+  el.className = 'volt-sprite';
+  el.id = 'sprite_' + v.id;
+  const bodyClass = v.id === 'luckyfer' ? 'lucky' : v.team;
+  el.innerHTML = `
+    <div class="turn-arrow">▼</div>
+    <div class="sprite-body ${bodyClass}" id="sbody_${v.id}">${v.emoji}</div>
+    <div class="sprite-hp-wrap">
+      <div class="sprite-hp-track"><div class="sprite-hp-fill" id="shp_${v.id}" style="width:100%"></div></div>
+      <div class="sprite-wil-track"><div class="sprite-wil-fill" id="swil_${v.id}" style="width:100%"></div></div>
+    </div>
+    <div class="sprite-name">${v.name.split(' ')[0]}</div>
+    <div class="sprite-statuses" id="sstat_${v.id}"></div>
+  `;
+  // Clicking a sprite just focuses it in the detail bar
+  el.onclick = () => focusVolt(v);
+  return el;
+}
+
+// ═══════════════════════════════════════════════════
+//  DAMAGE
+// ═══════════════════════════════════════════════════
+function calcDamage(attacker, defender, skill, hitNum, aoeIdx) {
+  let base = skill.base * (attacker.atk / 100);
+  if (attacker.elements.includes(skill.el)) base *= 1.25;
+  if (skill.chainDecay && hitNum > 0) base *= Math.pow(skill.chainDecay, hitNum);
+  if (aoeIdx > 0) base *= Math.pow(0.85, aoeIdx);
+  const press = countStatus(defender,'pressure');
+  if (press && skill.el === 'storm') base *= 1 + press * 0.08;
+  const burn = countStatus(defender,'burn');
+  if (burn && skill.el === 'fire')  base *= 1 + burn  * 0.08;
+  // % mitigation — never walls
+  base *= 1 - (defender.def / (defender.def + 80 + defender.level * 4));
+  if (hasStatus(attacker,'exhaust') && skill.wil > 0) base *= 0.6;
+  const crit = Math.random() < 0.05;
+  if (crit) base *= 1.75;
+  if (hasStatus(defender,'guard')) base *= 0.7;
+  base *= 0.94 + Math.random() * 0.12;
+  return { dmg: Math.max(3, Math.round(base)), crit };
+}
+
+// ═══════════════════════════════════════════════════
+//  STATUS
+// ═══════════════════════════════════════════════════
+function hasStatus(v,t)    { return v.statuses && v.statuses.some(s=>s.type===t); }
+function countStatus(v,t)  { const s = v.statuses&&v.statuses.find(s=>s.type===t); return s?(s.stacks||1):0; }
+function addStatus(v,t,turns,stacks) {
+  if (!v.statuses) v.statuses=[];
+  const ex=v.statuses.find(s=>s.type===t);
+  if (ex){ex.turns=Math.max(ex.turns,turns);ex.stacks=Math.min((ex.stacks||1)+(stacks||0),10);}
+  else v.statuses.push({type:t,turns,stacks:stacks||1});
+}
+function clearStatus(v,t)  { if(v.statuses) v.statuses=v.statuses.filter(s=>s.type!==t); }
+function tickStatuses(v) {
+  if (!v.statuses) return;
+  ['burn','poison'].forEach(t => {
+    const s = v.statuses.find(x=>x.type===t);
+    if (!s) return;
+    const pct = t==='burn' ? 0.025 : 0.03;
+    const dmg = Math.round(v.maxHp * pct * (s.stacks||1));
+    v.hp = Math.max(0, v.hp - dmg);
+    clog(`  ${t==='burn'?'🔥':'☠'} ${v.name} ${dmg} ${t} dmg`, 'lstat');
+  });
+  v.statuses = v.statuses.map(s=>({...s,turns:s.turns-1})).filter(s=>s.turns>0);
+}
+function recoverRes(v, mode) {
+  let sr=0.25, wr=0.12;
+  if(mode==='guard'){sr=0.35;wr=0.20;}if(mode==='focus'){sr=0.05;wr=0.40;}
+  if(mode==='rest'){sr=0.50;wr=0.50;}  if(mode==='attack'){sr=0;wr=0;}
+  if(hasStatus(v,'exhaust')) wr*=2;
+  v.sta=Math.min(v.maxSta,v.sta+Math.round(v.maxSta*sr));
+  v.wil=Math.min(v.maxWil,v.wil+Math.round(v.maxWil*wr));
+  if(hasStatus(v,'exhaust')&&v.wil>v.maxWil*0.15){clearStatus(v,'exhaust');clog(`${v.name} spark re-ignites.`,'lheal');}
+}
+
+// ═══════════════════════════════════════════════════
+//  SKILL GRID — Luckyfer only
+// ═══════════════════════════════════════════════════
+function buildSkillGrid() {
+  const lucky = allies.find(v => v.id === 'luckyfer');
+  const rows = document.getElementById('skillRows');
+  rows.innerHTML = '';
+  if (!lucky || lucky.fainted) return;
+
+  const liveEnemies = enemies.filter(e => !e.fainted);
+
+  (lucky.skills || []).forEach(id => {
+    const sk = SK[id];
+    if (!sk) return;
+
+    const canAfford = lucky.sta >= sk.sta && lucky.wil >= sk.wil;
+    const blocked   = hasStatus(lucky,'exhaust') && sk.wil > 0;
+    const suppressed = hasStatus(lucky,'suppress') && lucky.elements[0] === sk.el;
+    const disabled  = !battleActive || !isLuckyferTurn() || actionLocked || !canAfford || blocked || suppressed;
+
+    const row = document.createElement('div');
+    row.className = 'skill-row';
+    row.id = 'skrow_' + id;
+
+    // Skill button
+    const skBtn = document.createElement('button');
+    skBtn.className = 'skbtn' + (sk.aoe ? ' aoe' : '');
+    skBtn.id = 'skbtn_' + id;
+    skBtn.disabled = disabled;
+    skBtn.innerHTML = `
+      <div class="sk-name">${sk.name}</div>
+      <div class="sk-costs">
+        ${sk.sta ? `<span class="pip sta">STA ${sk.sta}</span>` : ''}
+        <span class="pip wil">WIL ${sk.wil}</span>
+        <span class="pip dmg">DMG ${sk.base}</span>
+        ${sk.hits > 1 ? `<span class="pip fx">×${sk.hits}</span>` : ''}
+        ${sk.aoe ? `<span class="pip aoe">AOE</span>` : ''}
+        ${sk.stun ? `<span class="pip fx">STUN</span>` : ''}
+      </div>
+    `;
+
+    row.appendChild(skBtn);
+
+    if (sk.aoe) {
+      // AoE: show who gets hit, one click fires
+      const strip = document.createElement('div');
+      strip.className = 'aoe-label';
+      const names = liveEnemies.map(e => e.name.split(' ')[0]).join(', ');
+      strip.innerHTML = `<span style="color:var(--muted)">ALL ENEMIES:</span> <span style="color:var(--red)">${names || '—'}</span>`;
+      row.appendChild(strip);
+
+      const fireBtn = document.createElement('button');
+      fireBtn.className = 'fire-btn';
+      fireBtn.textContent = '▶ FIRE';
+      fireBtn.disabled = disabled;
+      fireBtn.onclick = () => executeSkill(sk, liveEnemies);
+      row.appendChild(fireBtn);
+
+    } else {
+      // Single target: named buttons, one pre-selected
+      const strip = document.createElement('div');
+      strip.className = 'target-strip';
+      strip.id = 'tstrip_' + id;
+
+      liveEnemies.forEach(enemy => {
+        const hpPct = enemy.hp / enemy.maxHp;
+        const btn = document.createElement('button');
+        btn.className = 'tgt-btn' + (enemy.id === lastTargetId ? ' selected' : '');
+        btn.id = `tgt_${id}_${enemy.id}`;
+        btn.disabled = disabled;
+        btn.innerHTML = `
+          <span class="tgt-name">${enemy.name.split(' ')[0]}</span>
+          <span class="tgt-hp ${hpPct < 0.2 ? 'crit' : hpPct < 0.5 ? 'warn' : ''}">${Math.round(hpPct*100)}% HP</span>
+        `;
+        btn.onclick = () => {
+          // Update selection highlight across all strips
+          document.querySelectorAll('.tgt-btn').forEach(b => b.classList.remove('selected'));
+          document.querySelectorAll(`[id^="tgt_"][id$="_${enemy.id}"]`).forEach(b => b.classList.add('selected'));
+          lastTargetId = enemy.id;
+          // Update targeted ring on arena sprite
+          document.querySelectorAll('.volt-sprite.targeted').forEach(el => el.classList.remove('targeted'));
+          const spr = document.getElementById('sprite_' + enemy.id);
+          if (spr) spr.classList.add('targeted');
+        };
+        strip.appendChild(btn);
+      });
+
+      // Fire button — fires at currently selected target
+      const fireBtn = document.createElement('button');
+      fireBtn.className = 'fire-btn';
+      fireBtn.textContent = '▶ FIRE';
+      fireBtn.disabled = disabled;
+      fireBtn.onclick = () => {
+        const tgtId = lastTargetId || (liveEnemies[0] && liveEnemies[0].id);
+        const target = enemies.find(e => e.id === tgtId && !e.fainted) || liveEnemies[0];
+        if (!target) return;
+        lastTargetId = target.id;
+        executeSkill(sk, [target]);
+      };
+      strip.appendChild(fireBtn);
+
+      row.appendChild(strip);
+    }
+
+    skBtn.onclick = () => {
+      // Clicking skill name highlights that row (visual only — fire button executes)
+      document.querySelectorAll('.skbtn').forEach(b => b.classList.remove('active-skill'));
+      skBtn.classList.add('active-skill');
+    };
+
+    rows.appendChild(row);
+  });
+
+  // Apply arena targeted ring to last target
+  document.querySelectorAll('.volt-sprite.targeted').forEach(el => el.classList.remove('targeted'));
+  if (lastTargetId) {
+    const spr = document.getElementById('sprite_' + lastTargetId);
+    if (spr) spr.classList.add('targeted');
+  } else if (liveEnemies.length > 0) {
+    // Default to first live enemy
+    lastTargetId = liveEnemies[0].id;
+    const spr = document.getElementById('sprite_' + lastTargetId);
+    if (spr) spr.classList.add('targeted');
+    // Pre-select their buttons
+    document.querySelectorAll(`[id^="tgt_"][id$="_${lastTargetId}"]`).forEach(b => b.classList.add('selected'));
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  EXECUTE SKILL (used by both Luckyfer and AI)
+// ═══════════════════════════════════════════════════
+function executeSkill(sk, targets) {
+  if (!battleActive || targets.length === 0) return;
+  const actor = currentActor();
+  if (!actor || actor.fainted) return;
+
+  actor.sta -= sk.sta; actor.wil -= sk.wil;
+  if (actor.wil < 0) actor.wil = 0;
+  if (actor.wil === 0 && !hasStatus(actor,'exhaust')) {
+    addStatus(actor,'exhaust',99);
+    clog(`⚠️ ${actor.name} — WILL EXHAUSTED`, 'le');
+  }
+  clearStatus(actor,'guard');
+  actionLocked = true;
+
+  const prefix = actor.team==='ally' ? (actor.id==='luckyfer'?'lp':'la') : 'le';
+  clog(`${actor.emoji} ${actor.name} · ${sk.name}${sk.aoe?' [AoE]':''}`, prefix);
+
+  let runningMax = 0;
+  targets.forEach((target, ai) => {
+    let hitTotal = 0;
+    for (let h = 0; h < sk.hits; h++) {
+      const {dmg, crit} = calcDamage(actor, target, sk, h, ai);
+      target.hp = Math.max(0, target.hp - dmg);
+      hitTotal += dmg;
+      if (crit) clog(`  💥 CRIT on ${target.name}: ${dmg}`, 'lcrit');
+      else if (sk.hits > 1) clog(`  → ${target.name} hit ${h+1}: ${dmg}`, 'ldmg');
+      else clog(`  → ${target.name}: ${dmg} dmg`, 'ldmg');
+    }
+    runningMax = Math.max(runningMax, hitTotal);
+    popDmg(target, hitTotal);
+
+    if (sk.stun && !hasStatus(target,'stun'))       { addStatus(target,'stun',1);   clog(`  ⚡ ${target.name} STUNNED`,'lstat'); }
+    if (sk.burn)                                      { addStatus(target,'burn',3,1); clog(`  🔥 ${target.name} BURN ×${countStatus(target,'burn')}`,'lstat'); }
+    if (sk.pressure)                                  { addStatus(target,'pressure',99,1); clog(`  🌀 PRESSURE ×${countStatus(target,'pressure')} on ${target.name}`,'lstat'); }
+    if (sk.poison)                                    { addStatus(target,'poison',4,1); clog(`  ☠ ${target.name} POISONED`,'lstat'); }
+    if (sk.suppress && !hasStatus(target,'suppress')){ addStatus(target,'suppress',2); clog(`  🔇 ${target.name} SUPPRESSED 2r`,'lstat'); }
+    if (sk.suppressAll) {
+      const sideToSuppress = actor.team==='ally' ? enemies : allies;
+      sideToSuppress.filter(v=>!v.fainted).forEach(v => {
+        if(!hasStatus(v,'suppress')){addStatus(v,'suppress',1);clog(`  🔇 ${v.name} SUPPRESSED`,'lstat');}
+      });
+    }
+
+    if (target.hp <= 0 && !target.fainted) {
+      target.fainted = true;
+      clog(`  ✕ ${target.name} INCAPACITATED`, 'lwarn');
+      const spr = document.getElementById('sprite_'+target.id);
+      if (spr) spr.classList.add('fainted');
+      // If last target was this enemy, clear it
+      if (lastTargetId === target.id) {
+        const nextEnemy = enemies.find(e => !e.fainted);
+        lastTargetId = nextEnemy ? nextEnemy.id : null;
+      }
+    }
+  });
+
+  if (runningMax > maxDmgHit) maxDmgHit = runningMax;
+  recoverRes(actor, 'attack');
+  updateAllUI();
+
+  if (checkEnd()) return;
+  advanceTurn();
+}
+
+// ═══════════════════════════════════════════════════
+//  UTIL / ITEMS (Luckyfer only)
+// ═══════════════════════════════════════════════════
+function doUtil(type) {
+  if (!battleActive || actionLocked || !isLuckyferTurn()) return;
+  const actor = currentActor();
+  if (hasStatus(actor,'stun') && type !== 'flee') { clog(`${actor.name} is stunned!`,'lwarn'); return; }
+  clearStatus(actor,'guard'); actionLocked = true;
+
+  if (type==='guard') { addStatus(actor,'guard',1); clog(`🛡 ${actor.name} guards.`,'lp'); recoverRes(actor,'guard'); updateAllUI(); advanceTurn(); }
+  else if (type==='focus') { clog(`🔵 ${actor.name} focuses.`,'lp'); recoverRes(actor,'focus'); updateAllUI(); advanceTurn(); }
+  else if (type==='rest')  { clog(`💤 ${actor.name} rests — vulnerable.`,'lp'); recoverRes(actor,'rest'); updateAllUI(); advanceTurn(); }
+  else if (type==='flee')  {
+    if (Math.random()<0.6) { clog('💨 Escaped!','lheal'); endBattle('fled'); }
+    else { clog('💨 Flee failed!','lwarn'); updateAllUI(); advanceTurn(); }
+  }
+}
+function doItem(item) {
+  if (!battleActive || actionLocked || !isLuckyferTurn()) return;
+  const actor = currentActor(); actionLocked = true;
+  if (item==='spark_s') { const r=Math.round(actor.maxWil*0.20); actor.wil=Math.min(actor.maxWil,actor.wil+r); clog(`⚗️ WIL +${r}`,'lheal'); }
+  if (item==='spark_m') { const r=Math.round(actor.maxWil*0.40); actor.wil=Math.min(actor.maxWil,actor.wil+r); clog(`💠 WIL +${r}`,'lheal'); }
+  if (item==='stampack'){ const r=Math.round(actor.maxSta*0.25); actor.sta=Math.min(actor.maxSta,actor.sta+r); clog(`💊 STA +${r}`,'lheal'); }
+  if (item==='coolant') { clearStatus(actor,'burn'); clog(`❄️ Burn cleared.`,'lheal'); }
+  if (hasStatus(actor,'exhaust')&&actor.wil>actor.maxWil*0.15){clearStatus(actor,'exhaust');clog('Exhaustion cleared.','lheal');}
+  recoverRes(actor,'guard'); updateAllUI(); advanceTurn();
+}
+
+// ═══════════════════════════════════════════════════
+//  TURN MANAGEMENT
+// ═══════════════════════════════════════════════════
+function advanceTurn() {
+  // Find next non-fainted combatant
+  let next = (turnIndex + 1) % turnOrder.length;
+  let attempts = 0;
+  while (turnOrder[next] && turnOrder[next].fainted) {
+    next = (next+1) % turnOrder.length; attempts++;
+    if (attempts > turnOrder.length) break;
+  }
+
+  // Round wrap detection
+  if (next <= turnIndex) {
+    round++;
+    clog(`── Round ${round} ──`, 'ls');
+    [...allies,...enemies].filter(v=>!v.fainted).forEach(v=>{
+      tickStatuses(v);
+      v.wil = Math.min(v.maxWil, v.wil + Math.round(v.maxWil*0.10));
+      clearStatus(v,'guard');
+    });
+    if (checkEnd()) return;
+    rebuildTurnOrder(); turnIndex = 0;
+  } else {
+    turnIndex = next;
+  }
+
+  document.getElementById('roundBadge').textContent = `ROUND ${String(round).padStart(2,'0')}`;
+  advanceToNextTurn(false);
+}
+
+function advanceToNextTurn(isFirst) {
+  if (!battleActive) return;
+  const actor = currentActor();
+  if (!actor) return;
+
+  // Update header turn indicator
+  const ti = document.getElementById('turnInd');
+  const isLucky = actor.id === 'luckyfer';
+  const isAlly  = actor.team === 'ally';
+  ti.textContent = isLucky ? '◆ YOUR TURN' : `◆ ${actor.name}`;
+  ti.className = 'bh-turn ' + (isLucky ? 'lucky' : isAlly ? 'ally' : 'enemy');
+
+  // Active sprite arrow
+  document.querySelectorAll('.volt-sprite').forEach(el => el.classList.remove('active-turn'));
+  const actorSpr = document.getElementById('sprite_'+actor.id);
+  if (actorSpr) actorSpr.classList.add('active-turn');
+
+  actionLocked = false;
+
+  // Handle stun
+  if (hasStatus(actor,'stun')) {
+    clearStatus(actor,'stun');
+    clog(`⚡ ${actor.name} stunned — skips turn.`, 'lstat');
+    updateAllUI();
+    setTimeout(() => advanceTurn(), 350);
+    return;
+  }
+
+  if (actor.id === 'luckyfer') {
+    // Luckyfer — rebuild skill grid for player, focus him
+    focusVolt(actor);
+    buildSkillGrid();
+    updateAllUI();
+  } else {
+    // All other units (both allies and enemies) → AI
+    buildSkillGrid(); // rebuild in case targets changed
+    focusVolt(actor);
+    updateAllUI();
+    document.getElementById('ethink').classList.add('active');
+    document.getElementById('ethinkName').textContent = actor.name.split(' ')[0];
+    const delay = isFirst && actor.team==='enemy' ? 800 : 500 + Math.random()*500;
+    setTimeout(() => {
+      document.getElementById('ethink').classList.remove('active');
+      unitAI(actor);
+    }, delay);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  AI — used for ALL non-Luckyfer units (allies + enemies)
+// ═══════════════════════════════════════════════════
+function unitAI(actor) {
+  if (!battleActive) return;
+  clearStatus(actor,'guard');
+
+  // Targets: enemies attack allies, allies attack enemies
+  const targets = actor.team==='ally'
+    ? enemies.filter(v=>!v.fainted)
+    : allies.filter(v=>!v.fainted);
+
+  if (targets.length === 0) { advanceTurn(); return; }
+
+  const wilPct = actor.wil / actor.maxWil;
+  if (wilPct < 0.18) {
+    clog(`${actor.emoji} ${actor.name} recovers WIL.`, actor.team==='ally'?'la':'le');
+    recoverRes(actor,'focus'); actionLocked=true; updateAllUI(); advanceTurn(); return;
+  }
+
+  const avail = (actor.skills||[]).filter(id => {
+    const s=SK[id]; return s && actor.wil>=s.wil && actor.sta>=s.sta;
+  });
+  if (avail.length===0) { recoverRes(actor,'guard'); actionLocked=true; updateAllUI(); advanceTurn(); return; }
+
+  const hpPct = actor.hp / actor.maxHp;
+  const aoeSkills  = avail.filter(id=>SK[id].aoe);
+  const stunSkills = avail.filter(id=>SK[id].stun);
+  let chosen;
+
+  if (targets.length > 1 && aoeSkills.length && Math.random()<0.4)
+    chosen = aoeSkills[Math.floor(Math.random()*aoeSkills.length)];
+  else if (hpPct<0.35 && Math.random()<0.5)
+    chosen = avail.reduce((b,id)=>SK[id].base>SK[b].base?id:b);
+  else if (stunSkills.length && Math.random()<0.25)
+    chosen = stunSkills[0];
+  else {
+    const w=avail.map(id=>SK[id].base), tot=w.reduce((a,b)=>a+b,0);
+    let r=Math.random()*tot; chosen=avail[0];
+    for(let i=0;i<avail.length;i++){r-=w[i];if(r<=0){chosen=avail[i];break;}}
+  }
+
+  const sk = SK[chosen]; actionLocked = true;
+  if (sk.aoe) {
+    executeSkill(sk, targets);
+  } else {
+    const tgt = targets.reduce((a,b)=>a.hp<b.hp?a:b);
+    executeSkill(sk, [tgt]);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  WIN / LOSS
+// ═══════════════════════════════════════════════════
+function checkEnd() {
+  if (allies.filter(v=>!v.fainted).length===0) { endBattle('lose'); return true; }
+  if (enemies.filter(v=>!v.fainted).length===0){ endBattle('win');  return true; }
+  return false;
+}
+function endBattle(outcome) {
+  window.parent.postMessage({
+  type: 'BATTLE_END',
+  result: outcome
+  }, '*')
+  battleActive=false; actionLocked=true;
+  setTimeout(() => showResult(outcome), 500);
+}
+function showResult(outcome) {
+  const badge = document.getElementById('rBadge');
+  badge.className = 'result-badge ' + outcome;
+  badge.textContent = outcome==='win'?'VICTORY':outcome==='lose'?'DEFEATED':'ESCAPED';
+  const mainEnemy = enemies.find(e=>e.quote&&e.quote.win)||enemies[0];
+  if (outcome==='win') {
+    document.getElementById('rQuote').textContent = mainEnemy.quote.win || `${currentScenario.label} complete.`;
+    document.getElementById('rPanel').style.display = 'flex';
+    playerXP += currentScenario.xp;
+    document.getElementById('rXP').textContent = `+${currentScenario.xp} XP`;
+    document.getElementById('rRounds').textContent = `${round} ROUNDS`;
+    document.getElementById('rMaxDmg').textContent = `${maxDmgHit} DMG`;
+    const need = XP_TABLE[Math.min(playerLevel,XP_TABLE.length-1)]||3300;
+    if (playerXP>=need){playerLevel++;playerXP-=need;document.getElementById('rLvlup').style.display='block';document.getElementById('rXpFill').classList.add('up');}
+    else {document.getElementById('rLvlup').style.display='none';document.getElementById('rXpFill').classList.remove('up');}
+    const newNeed=XP_TABLE[Math.min(playerLevel,XP_TABLE.length-1)]||3300;
+    document.getElementById('rXpLabel').textContent=`${playerXP} / ${newNeed}`;
+    setTimeout(()=>{document.getElementById('rXpFill').style.width=Math.min(100,(playerXP/newNeed)*100)+'%';},300);
+  } else {
+    document.getElementById('rQuote').textContent = outcome==='lose' ? (mainEnemy.quote.lose||'The team falls.') : 'Retreat into the grid.';
+    document.getElementById('rPanel').style.display='none';
+  }
+  showScreen('result');
+}
+function goBack() { showScreen('battle'); switchTab('setup'); battleActive=false; }
+function rematch() { startScenario(SCENARIOS.indexOf(currentScenario)); }
+
+// ═══════════════════════════════════════════════════
+//  UI
+// ═══════════════════════════════════════════════════
+function updateAllUI() {
+  [...allies,...enemies].forEach(v => {
+    const hpPct = Math.max(0, v.hp/v.maxHp*100);
+    const wilPct= Math.max(0, v.wil/v.maxWil*100);
+    const hpBar = document.getElementById('shp_'+v.id);
+    if (hpBar){ hpBar.style.width=hpPct+'%'; hpBar.className='sprite-hp-fill'+(hpPct<20?' crit':hpPct<50?' warn':''); }
+    const wBar=document.getElementById('swil_'+v.id);
+    if (wBar) wBar.style.width=wilPct+'%';
+    const sEl=document.getElementById('sstat_'+v.id);
+    if (sEl) sEl.innerHTML=(v.statuses||[]).map(s=>{
+      const L={burn:'🔥',stun:'⚡',pressure:'🌀',exhaust:'💀',guard:'🛡',suppress:'🔇',poison:'☠'};
+      return `<span class="mc ${s.type}">${L[s.type]||s.type[0]}${s.stacks>1?s.stacks:''}</span>`;
+    }).join('');
+  });
+
+  // Refresh target HP % on buttons
+  enemies.filter(e=>!e.fainted).forEach(e => {
+    const hpPct = e.hp/e.maxHp;
+    document.querySelectorAll(`[id^="tgt_"][id*="_${e.id}"] .tgt-hp`).forEach(el => {
+      el.textContent = Math.round(hpPct*100) + '% HP';
+      el.className = 'tgt-hp' + (hpPct<0.2?' crit':hpPct<0.5?' warn':'');
+    });
+  });
+
+  if (focusedVolt) updateDetailBar(focusedVolt);
+}
+
+function focusVolt(v) {
+  focusedVolt = v;
+  document.querySelectorAll('.sprite-body').forEach(el => el.style.outline='');
+  const body = document.getElementById('sbody_'+v.id);
+  if (body) body.style.outline = '2px solid rgba(255,190,61,0.55)';
+  updateDetailBar(v);
+}
+let focusedVolt = null;
+
+function updateDetailBar(v) {
+  document.getElementById('dAvatar').textContent = v.emoji;
+  document.getElementById('dName').textContent   = v.name;
+  document.getElementById('dHpBar').style.width  = Math.max(0, v.hp /v.maxHp *100)+'%';
+  document.getElementById('dStaBar').style.width = Math.max(0, v.sta/v.maxSta*100)+'%';
+  document.getElementById('dWilBar').style.width = Math.max(0, v.wil/v.maxWil*100)+'%';
+  document.getElementById('dHpNum').textContent  = `${Math.max(0,v.hp)}/${v.maxHp}`;
+  document.getElementById('dStaNum').textContent = `${Math.max(0,v.sta)}/${v.maxSta}`;
+  document.getElementById('dWilNum').textContent = `${Math.max(0,v.wil)}/${v.maxWil}`;
+  document.getElementById('dTags').innerHTML = v.elements.map(el=>`<span class="dtag ${el}">${el.toUpperCase()}</span>`).join('')
+    + `<span class="dtag idx">LV${v.level}</span>`;
+}
+
+function popDmg(volt, dmg) {
+  const el = document.getElementById('sbody_'+volt.id);
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  const d = document.createElement('div');
+  d.className = 'dmgpop';
+  d.textContent = '-'+dmg;
+  d.style.color = volt.team==='enemy' ? 'var(--gold)' : 'var(--red)';
+  d.style.left = (r.left+r.width/2-18)+'px';
+  d.style.top  = (r.top+8)+'px';
+  document.body.appendChild(d);
+  // shake
+  const spr = document.getElementById('sprite_'+volt.id);
+  if (spr){spr.classList.add('hit');setTimeout(()=>spr.classList.remove('hit'),300);}
+  setTimeout(()=>d.remove(),880);
+}
+
+function switchTab(tab) {
+  document.getElementById('tpSkills').style.display = tab==='skills'  ? '' : 'none';
+  document.getElementById('tpUtil').style.display   = tab==='utility' ? '' : 'none';
+  document.getElementById('tpSetup').style.display  = tab==='setup'   ? '' : 'none';
+  document.querySelectorAll('.ptab').forEach((b,i)=>{
+    b.classList.toggle('active',(i===0&&tab==='skills')||(i===1&&tab==='utility')||(i===2&&tab==='setup'));
+  });
+}
+
+function showScreen(name) {
+  ['battle','result'].forEach(s=>document.getElementById(s).classList.toggle('hidden',s!==name));
+}
+
+function clog(text, cls) {
+  const log=document.getElementById('combatLog');
+  const d=document.createElement('div'); d.className='ll '+(cls||'ls'); d.textContent=text;
+  log.appendChild(d); log.scrollTop=log.scrollHeight;
+}
+function clearLog() { document.getElementById('combatLog').innerHTML=''; }
+
+// INIT
+buildSetupTab();
+
+// Auto start simple fight (Kurla intro)
+startScenario(2); if (enemyType === 'veil_1v1') {
+  startScenario(0)
+}
+else if (enemyType === 'veil_1v2') {
+  startScenario(2)
+}
+else if (enemyType === 'veil_boss') {
+  startScenario(1)
+}
+else {
+  startScenario(0)
+}
+switchTab('skills');
+</script>
+</body>
+</html>

@@ -7,6 +7,30 @@ export interface DialogueBeat {
   pages: string[]    // advance with SPACE / Z / Enter
 }
 
+export const kurla_intro = [
+  "Rush hour.",
+  "Exactly as it always is.",
+  "...",
+  "Crowded platforms. Noise. Movement.",
+  "No one looking up.",
+  "No one expecting anything.",
+]
+
+export const kurla_blast = [
+  "...There it is.",
+  "Eleven seconds.",
+  "I counted.",
+  "...",
+  "I've been waiting six years for the right moment.",
+  "This is it.",
+  "Or close enough."
+]
+
+export const kurla_post_fight = [
+  "I didn't give my name.",
+  "I was gone before the police arrived.",
+  "The footage is already everywhere."
+]
 export const DIALOGUES: Record<string, DialogueBeat[]> = {
 
   // ── BANDRA WEST ──────────────────────────────────────────────────────────
